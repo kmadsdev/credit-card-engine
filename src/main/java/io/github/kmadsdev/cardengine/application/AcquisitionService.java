@@ -36,6 +36,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Acquisition flow for a new client, in one transaction:
@@ -177,10 +178,14 @@ public class AcquisitionService {
         outbox.append("card_application", application.getId(), "ApplicationDecided", payload);
 
         String variant = application.getApprovedVariant() == null ? "NONE" : application.getApprovedVariant().name();
-        meters.counter("cards.applications.decided", "outcome", outcome, "variant", variant).increment();
-        log.info("application decided id={} cpf={} outcome={} variant={} reasons={}",
-                application.getId(), Cpf.mask(application.getCpf()), outcome, variant,
-                decision.getReasons().stream().map(Reason::code).toList());
+        UUID applicationId = application.getId();
+        String maskedCpf = Cpf.mask(application.getCpf());
+        List<String> reasonCodes = decision.getReasons().stream().map(Reason::code).toList();
+        AfterCommit.run(() -> {
+            meters.counter("cards.applications.decided", "outcome", outcome, "variant", variant).increment();
+            log.info("application decided id={} cpf={} outcome={} variant={} reasons={}",
+                    applicationId, maskedCpf, outcome, variant, reasonCodes);
+        });
         return new Created<>(ApplicationView.of(application, decision), false);
     }
 

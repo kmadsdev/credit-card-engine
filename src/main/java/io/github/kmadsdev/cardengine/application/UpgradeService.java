@@ -183,9 +183,12 @@ public class UpgradeService {
         payload.put("reasonCodes", result.reasons().stream().map(Reason::code).toList());
         outbox.append("upgrade_request", requestId, "UpgradeDecided", payload);
 
-        meters.counter("cards.upgrades.decided", "outcome", result.outcome().name()).increment();
-        log.info("upgrade decided id={} account={} cpf={} outcome={} reasons={}", requestId, accountId,
-                Cpf.mask(customer.getCpf()), result.outcome(), result.reasons().stream().map(Reason::code).toList());
+        String maskedCpf = Cpf.mask(customer.getCpf());
+        AfterCommit.run(() -> {
+            meters.counter("cards.upgrades.decided", "outcome", result.outcome().name()).increment();
+            log.info("upgrade decided id={} account={} cpf={} outcome={} reasons={}", requestId, accountId,
+                    maskedCpf, result.outcome(), result.reasons().stream().map(Reason::code).toList());
+        });
         return new Created<>(UpgradeRequestView.of(request, decision), false);
     }
 

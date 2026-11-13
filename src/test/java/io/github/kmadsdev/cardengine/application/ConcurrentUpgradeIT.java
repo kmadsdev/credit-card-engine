@@ -13,6 +13,8 @@ import io.github.kmadsdev.cardengine.testsupport.IntegrationTest;
 import io.github.kmadsdev.cardengine.testsupport.IntegrationTestConfig;
 import io.github.kmadsdev.cardengine.testsupport.MutableClock;
 import io.github.kmadsdev.cardengine.testsupport.TestCreditBureau;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,6 +57,12 @@ class ConcurrentUpgradeIT {
     UpgradeRequestRepository requests;
     @Autowired
     TransactionTemplate tx;
+    @Autowired
+    MeterRegistry meters;
+
+    private double decided() {
+        return meters.find("cards.upgrades.decided").counters().stream().mapToDouble(Counter::count).sum();
+    }
 
     @BeforeEach
     void resetClock() {
@@ -105,6 +113,7 @@ class ConcurrentUpgradeIT {
     void twoConcurrentRequestsThatChangeNoVariantCannotBothPassTheCooldown() throws Exception {
         CardAccount account = fixtures.existingClient(CardVariant.CREDIT_BASE, "2000.00", 12, "5000.00", 700, 12, 0,
                 "200.00").account();
+        double decidedBefore = decided();
 
         List<Object> results = raceTwo(account.getId(), "race-" + UUID.randomUUID(), "race-" + UUID.randomUUID());
 
@@ -112,6 +121,7 @@ class ConcurrentUpgradeIT {
         assertThat(results).filteredOn(r -> r instanceof ConcurrentUpdateException).hasSize(1);
         assertThat(requests.findByAccountId(account.getId(), org.springframework.data.domain.Pageable.unpaged()))
                 .singleElement().satisfies(r -> assertThat(r.getStatus()).isEqualTo(UpgradeStatus.KEPT));
+        assertThat(decided() - decidedBefore).as("a rolled-back decision is not counted").isEqualTo(1.0);
     }
 
     /** A client retry that arrives while the first try still runs gets the first result, not a 409. */
