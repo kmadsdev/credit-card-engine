@@ -21,6 +21,6 @@ public class LogEventPublisher implements EventPublisher {
     public void publish(Event event) {
         log.info("event {} {}", kv("eventType", event.type()), kv("eventId", event.id()),
                 kv("aggregateType", event.aggregateType()), kv("aggregateId", event.aggregateId()),
-                kv("occurredAt", event.occurredAt()), kv("payload", event.payload()));
+                kv("occurredAt", event.occurredAt().toString()), kv("payload", event.payload()));
     }
 }
