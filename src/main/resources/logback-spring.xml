@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  One JSON object per log line (logstash-logback-encoder). The MDC adds correlationId.
+  The masking decorator rewrites any CPF-shaped or card-number-shaped text in any field
+  (message, arguments, stack trace) before the line is written. LogMaskingTest proves it.
+  Plain logback tags only, so the test can load this file without Spring.
+-->
+<configuration>
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdcKeyName>correlationId</includeMdcKeyName>
+            <jsonGeneratorDecorator class="net.logstash.logback.mask.MaskingJsonGeneratorDecorator">
+                <!-- CPF: 11 digits, with or without the usual punctuation. Keeps no digit. -->
+                <valueMask>
+                    <value>(?&lt;!\d)\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?!\d)</value>
+                    <mask>***.***.***-**</mask>
+                </valueMask>
+                <!-- Card number: 13 to 19 digits, with or without spaces or dashes. -->
+                <valueMask>
+                    <value>(?&lt;!\d)\d{4}(?:[ -]?\d{4}){2}[ -]?\d{1,7}(?!\d)</value>
+                    <mask>****</mask>
+                </valueMask>
+            </jsonGeneratorDecorator>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="JSON_CONSOLE"/>
+    </root>
+</configuration>
