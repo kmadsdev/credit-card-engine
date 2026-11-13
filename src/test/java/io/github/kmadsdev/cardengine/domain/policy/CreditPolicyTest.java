@@ -220,6 +220,23 @@ class CreditPolicyTest {
         }
 
         @Test
+        void capAtTheTopOfTheTargetVariantIsExplained() {
+            // 10000 x 3.0 = 30000.00, but one upgrade moves one variant: PLATINUM ends at 8000.00
+            var d = CreditPolicy.decideUpgrade(base(CREDIT_BASE, "2000.00", "0.95", "0.80", "10000.00", 860));
+            assertThat(d.newLimit()).isEqualTo(brl("8000.00"));
+            assertThat(d.reasons()).filteredOn(r -> r.code().equals("LIMIT_CAPPED_AT_VARIANT"))
+                    .singleElement()
+                    .satisfies(r -> assertThat(r.detail()).contains("30000.00").contains("8000.00"));
+        }
+
+        @Test
+        void noCapReasonWhenTheLimitFitsTheTargetVariant() {
+            var d = CreditPolicy.decideUpgrade(base(CREDIT_BASE, "2000.00", "0.95", "0.80", "4000.00", 700));
+            assertThat(d.newLimit()).isEqualTo(brl("4000.00"));
+            assertThat(codes(d.reasons())).doesNotContain("LIMIT_CAPPED_AT_VARIANT");
+        }
+
+        @Test
         void debitAccountWithoutStatementsIsNotBlockedByHistoryRules() {
             var facts = new UpgradeFacts(DEBIT, brl("0.00"), 6, 0, BigDecimal.ONE, BigDecimal.ZERO, brl("3000.00"), 600);
             assertThat(codes(CreditPolicy.decideUpgrade(facts).reasons()))

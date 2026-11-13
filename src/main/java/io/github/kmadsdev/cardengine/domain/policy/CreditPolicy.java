@@ -223,7 +223,13 @@ public final class CreditPolicy {
                             + " (from " + floor.toPlainString() + ")"));
             return new UpgradeDecision(Outcome.KEPT, null, null, reasons, VERSION);
         }
-        BigDecimal newLimit = targetBand.max() == null ? proposed : proposed.min(targetBand.max());
+        BigDecimal newLimit = proposed;
+        if (targetBand.max() != null && proposed.compareTo(targetBand.max()) > 0) {
+            newLimit = targetBand.max();
+            reasons.add(new Reason("LIMIT_CAPPED_AT_VARIANT", Effect.INFO,
+                    "proposed limit " + proposed.toPlainString() + " capped at the " + target + " maximum "
+                            + newLimit.toPlainString() + ": an upgrade moves one variant only"));
+        }
         reasons.add(new Reason("UPGRADE_TO_NEXT_VARIANT", Effect.INFO,
                 facts.currentVariant() + " -> " + target + ", limit "
                         + Money.of(facts.currentLimit()).toPlainString() + " -> " + newLimit.toPlainString()));
