@@ -151,7 +151,7 @@ Part of a response (debit, because this CPF got a simulated score of 498):
   "status": "CARD_ISSUED",
   "cpfMasked": "***.***.***-29",
   "variant": "DEBIT",
-  "creditLimit": 0.0,
+  "creditLimit": 0.00,
   "decision": {
     "outcome": "APPROVED",
     "policyVersion": "2026-11.1",
@@ -178,12 +178,13 @@ curl -s -X POST "localhost:8080/api/v1/accounts/$ACCOUNT_ID/upgrade-requests" \
   "status": "APPLIED",
   "fromVariant": "CREDIT_BASE",
   "toVariant": "CREDIT_PLATINUM",
-  "toLimit": 8000.0,
+  "toLimit": 8000.00,
   "decision": {
     "outcome": "APPROVED",
     "reasons": [
       { "code": "HISTORY_BONUS", "effect": "INFO", "detail": "all statements on time and utilization at least 0.70: limit x 1.25" },
       { "code": "SCORE_BAND", "effect": "INFO", "detail": "score 773 in band 750-849: limit = income 5000.00 x 2.0 x 1.25 = 12500.00" },
+      { "code": "LIMIT_CAPPED_AT_VARIANT", "effect": "INFO", "detail": "proposed limit 12500.00 capped at the CREDIT_PLATINUM maximum 8000.00: an upgrade moves one variant only" },
       { "code": "UPGRADE_TO_NEXT_VARIANT", "effect": "INFO", "detail": "CREDIT_BASE -> CREDIT_PLATINUM, limit 2000.00 -> 8000.00" }
     ]
   }
@@ -231,9 +232,10 @@ Each one has an ADR in [`docs/adr/`](docs/adr/).
 5. **Transactional outbox** ([0005](docs/adr/0005-transactional-outbox.md)). Events are written in the
    same transaction as the change and published by a scheduled job through a port.
    The adapter writes them to the log; no broker is used.
-6. **Optimistic locking and cooldown** ([0006](docs/adr/0006-upgrade-concurrency.md)). Two concurrent
-   upgrades of one account cannot both apply. `ConcurrentUpgradeIT` forces the race with
-   a barrier, so the test is deterministic.
+6. **Optimistic locking and cooldown** ([0006](docs/adr/0006-upgrade-concurrency.md)). Every upgrade
+   request writes the account row (the cooldown time lives there), so of two concurrent
+   requests for one account only one commits, whatever the policy outcome.
+   `ConcurrentUpgradeIT` forces the race with a barrier, so the test is deterministic.
 7. **Idempotency keys and money** ([0007](docs/adr/0007-idempotency-and-money.md)). Key plus request
    hash; `BigDecimal` with scale 2, never rounded on input.
 
@@ -249,7 +251,7 @@ and readiness, and Prometheus metrics (`cards_applications_decided_total`,
 |---|---|---|
 | Unit | `domain/` | Policy decision tables, exact band boundaries, property-style invariants (5,000 generated inputs per flow, fixed seed), both state machines, CPF, Luhn, money |
 | Slice | `api/ApiSliceTest` | HTTP mapping and problem details with the use cases mocked |
-| Integration | `*IT` | Both flows over HTTP, idempotency, cooldown, outbox, concurrent upgrades, actuator, on PostgreSQL 16 through Testcontainers |
+| Integration | `*IT` | Both flows over HTTP, idempotency, cooldown, outbox, concurrent upgrades, concurrent applications for one CPF, actuator, on PostgreSQL 16 through Testcontainers |
 | Architecture | `architecture/ArchitectureTest` | Layering and a plain-Java domain |
 | Logging | `observability/LogMaskingTest` | CPF and card numbers masked in message, arguments and stack trace |
 

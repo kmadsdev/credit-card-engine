@@ -17,8 +17,11 @@ must move exactly one variant up per approved request.
 - Upgrade state machine: `REQUESTED -> APPROVED -> APPLIED`. APPROVED (policy said yes)
   and APPLIED (row changed) are separate, so a lost race cannot look applied.
 - Cooldown: 30 days (`CreditPolicy.UPGRADE_COOLDOWN`) from the last stored request of
-  the account. A request inside the cooldown gets 429 with `Retry-After` and is not
-  stored, so repeated tries do not extend the wait.
+  the account. The time is kept on the account row (`last_upgrade_request_at`), and
+  every request writes it, also a KEPT or REJECTED one. So every request goes through
+  the version check, and two concurrent requests for one account cannot both be stored
+  inside the cooldown. A request inside the cooldown gets 429 with `Retry-After` and is
+  not stored, so repeated tries do not extend the wait.
 - No downgrade: the policy only proposes `current.next()`, and
   `CardAccount.upgradeTo` refuses any variant that is not higher.
 
@@ -30,5 +33,9 @@ holding a row lock across that call would block other work on the account.
 
 - `ConcurrentUpgradeIT` proves it deterministically: the test bureau holds both
   requests at a barrier after they read the account, so both read the same version.
-  A second test fires 8 requests at once and checks that exactly one applies.
-- A client that gets 409 may retry. It will then usually get 429 (cooldown).
+  A second test fires 8 requests at once and checks that exactly one applies. A third
+  races two requests that the policy keeps (no variant change) and checks that only one
+  is stored.
+- A retry with the same `Idempotency-Key` that loses the race gets the winner's result
+  as a replay, not 409. A request with another key gets 409; if it retries, it then
+  usually gets 429 (cooldown).

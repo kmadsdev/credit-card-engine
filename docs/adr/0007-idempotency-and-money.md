@@ -12,8 +12,10 @@ Status: accepted (2026-11-13)
 - Same key, same body: the stored resource comes back with 200 and
   `Idempotent-Replayed: true`. No second decision is made.
 - Same key, other body: 422 `idempotency-key-reused`.
-- Two requests with the same key at the same time: one insert wins on the unique
-  index; the other catches the violation and returns the winner as a replay.
+- Two requests with the same key at the same time: one wins; the other gets the
+  winner as a replay. For an application the loser fails on the unique index of the
+  key. For an upgrade it usually fails first on the account version check; the service
+  then looks the key up before it answers 409 (`ConcurrentUpgradeIT` covers it).
 
 Keys do not expire in this project. A real system would expire them (for example after
 24 hours) and clean the column.

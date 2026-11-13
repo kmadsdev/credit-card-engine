@@ -115,7 +115,7 @@ docker compose up --build
 
 Isso sobe o PostgreSQL e a aplicação na porta 8080 com o profile `demo`. Esse profile
 cria um cliente existente (uma conta `CREDIT_BASE` aberta há 13 meses, com 12 faturas
-pagas em dia), para dar para testar o upgrade na hora.
+pagas em dia), então já dá para testar o upgrade.
 
 - OpenAPI UI: http://localhost:8080/swagger-ui.html
 - Readiness: http://localhost:8080/actuator/health/readiness
@@ -151,7 +151,7 @@ Trecho de uma resposta (débito, porque esse CPF tirou score simulado 498):
   "status": "CARD_ISSUED",
   "cpfMasked": "***.***.***-29",
   "variant": "DEBIT",
-  "creditLimit": 0.0,
+  "creditLimit": 0.00,
   "decision": {
     "outcome": "APPROVED",
     "policyVersion": "2026-11.1",
@@ -178,12 +178,13 @@ curl -s -X POST "localhost:8080/api/v1/accounts/$ACCOUNT_ID/upgrade-requests" \
   "status": "APPLIED",
   "fromVariant": "CREDIT_BASE",
   "toVariant": "CREDIT_PLATINUM",
-  "toLimit": 8000.0,
+  "toLimit": 8000.00,
   "decision": {
     "outcome": "APPROVED",
     "reasons": [
       { "code": "HISTORY_BONUS", "effect": "INFO", "detail": "all statements on time and utilization at least 0.70: limit x 1.25" },
       { "code": "SCORE_BAND", "effect": "INFO", "detail": "score 773 in band 750-849: limit = income 5000.00 x 2.0 x 1.25 = 12500.00" },
+      { "code": "LIMIT_CAPPED_AT_VARIANT", "effect": "INFO", "detail": "proposed limit 12500.00 capped at the CREDIT_PLATINUM maximum 8000.00: an upgrade moves one variant only" },
       { "code": "UPGRADE_TO_NEXT_VARIANT", "effect": "INFO", "detail": "CREDIT_BASE -> CREDIT_PLATINUM, limit 2000.00 -> 8000.00" }
     ]
   }
@@ -230,9 +231,10 @@ Cada uma tem um ADR em [`docs/adr/`](docs/adr/) (em inglês).
 5. **Transactional outbox** ([0005](docs/adr/0005-transactional-outbox.md)). Os eventos são gravados na
    mesma transação da mudança e publicados por um job agendado através de um port. O
    adapter escreve no log; nenhum broker é usado.
-6. **Optimistic locking e cooldown** ([0006](docs/adr/0006-upgrade-concurrency.md)). Dois upgrades
-   simultâneos da mesma conta não aplicam os dois. O `ConcurrentUpgradeIT` força a
-   corrida com uma barreira, então o teste é determinístico.
+6. **Optimistic locking e cooldown** ([0006](docs/adr/0006-upgrade-concurrency.md)). Todo pedido de
+   upgrade grava a linha da conta (o horário do cooldown fica nela), então, de dois pedidos
+   simultâneos para a mesma conta, só um faz commit, seja qual for o resultado da policy.
+   O `ConcurrentUpgradeIT` força a corrida com uma barreira, então o teste é determinístico.
 7. **Idempotency keys e dinheiro** ([0007](docs/adr/0007-idempotency-and-money.md)). Chave mais hash do
    request; `BigDecimal` com escala 2, sem arredondar a entrada.
 
@@ -249,7 +251,7 @@ configuração real), liveness e readiness do Actuator, e métricas Prometheus
 |---|---|---|
 | Unitário | `domain/` | Tabelas de decisão da policy, limites exatos das faixas, invariantes no estilo property-based (5.000 entradas geradas por fluxo, seed fixa), as duas máquinas de estado, CPF, Luhn, dinheiro |
 | Slice | `api/ApiSliceTest` | Mapeamento HTTP e problem details com os use cases mockados |
-| Integração | `*IT` | Os dois fluxos via HTTP, idempotência, cooldown, outbox, upgrades concorrentes, actuator, em PostgreSQL 16 via Testcontainers |
+| Integração | `*IT` | Os dois fluxos via HTTP, idempotência, cooldown, outbox, upgrades concorrentes, propostas simultâneas para o mesmo CPF, actuator, em PostgreSQL 16 via Testcontainers |
 | Arquitetura | `architecture/ArchitectureTest` | Camadas e domínio em Java puro |
 | Logs | `observability/LogMaskingTest` | CPF e número de cartão mascarados na mensagem, nos argumentos e no stack trace |
 
