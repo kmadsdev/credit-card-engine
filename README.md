@@ -173,6 +173,12 @@ curl -s -X POST "localhost:8080/api/v1/accounts/$ACCOUNT_ID/upgrade-requests" \
   -H "Idempotency-Key: upgrade-$(date +%s)"
 ```
 
+The demo client gets a random synthetic CPF at start-up, with a simulated score of at
+least 650, so the new limit changes from run to run. With a score from 650 to 749 the
+result is `5000.00 x 1.0 x 1.25 = 6250.00`, below the CREDIT_PLATINUM maximum, and there
+is no `LIMIT_CAPPED_AT_VARIANT` reason. With a higher score the limit is capped at the
+variant maximum, as in this example (score 773):
+
 ```json
 {
   "status": "APPLIED",
