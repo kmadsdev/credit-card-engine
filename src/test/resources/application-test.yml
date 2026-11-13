@@ -1,0 +1,4 @@
+app:
+  outbox:
+    # Tests call OutboxPublisher.publishPending() themselves.
+    scheduling-enabled: false

@@ -45,6 +45,15 @@ public final class Cpf {
         return "***.***.***-" + digits.substring(9);
     }
 
+    /** Appends the two check digits to a 9-digit base. Used by the demo data loader. */
+    public static String completeWithCheckDigits(String nineDigits) {
+        if (nineDigits == null || !nineDigits.matches("\\d{9}")) {
+            throw new IllegalArgumentException("base must be 9 digits");
+        }
+        int first = checkDigit(nineDigits);
+        return nineDigits + first + checkDigit(nineDigits + first);
+    }
+
     /** Weights go from length + 1 down to 2. A remainder below 2 gives digit 0. */
     static int checkDigit(String base) {
         int sum = 0;
