@@ -114,6 +114,22 @@ class ConcurrentUpgradeIT {
                 .singleElement().satisfies(r -> assertThat(r.getStatus()).isEqualTo(UpgradeStatus.KEPT));
     }
 
+    /** A client retry that arrives while the first try still runs gets the first result, not a 409. */
+    @Test
+    void sameKeySentTwiceAtOnceGivesOneResultAndOneReplay() throws Exception {
+        CardAccount account = healthyBaseAccount();
+        String key = "race-same-" + UUID.randomUUID();
+
+        List<Object> results = raceTwo(account.getId(), key, key);
+
+        assertThat(results).allMatch(r -> r instanceof Views.Created<?>, "both calls return the stored result");
+        assertThat(results).filteredOn(r -> ((Views.Created<?>) r).replayed()).hasSize(1);
+        assertThat(results.stream().map(r -> ((Views.UpgradeRequestView) ((Views.Created<?>) r).body()).id())
+                .distinct()).as("both calls describe the same upgrade request").hasSize(1);
+        assertThat(requests.findByAccountId(account.getId(), org.springframework.data.domain.Pageable.unpaged()))
+                .singleElement().satisfies(r -> assertThat(r.getStatus()).isEqualTo(UpgradeStatus.APPLIED));
+    }
+
     /**
      * Deterministic race: the bureau call sits after the account read and the cooldown
      * check, and before any write. A barrier of 2 there means both requests have read

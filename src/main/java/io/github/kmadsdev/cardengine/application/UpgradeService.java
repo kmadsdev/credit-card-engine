@@ -94,6 +94,11 @@ public class UpgradeService {
         try {
             return tx.execute(status -> requestInTransaction(accountId, income, idempotencyKey, hash));
         } catch (ObjectOptimisticLockingFailureException e) {
+            // The same key sent twice at once: the other call won, and its result is the answer.
+            Optional<Created<UpgradeRequestView>> replay = replayOf(idempotencyKey, hash);
+            if (replay.isPresent()) {
+                return replay.get();
+            }
             meters.counter("cards.upgrades.conflicts").increment();
             log.info("upgrade lost an optimistic lock race account={}", accountId);
             throw new ConcurrentUpdateException("The account was changed by another request; read it again and retry", e);
