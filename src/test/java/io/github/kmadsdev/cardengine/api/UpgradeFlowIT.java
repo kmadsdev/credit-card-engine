@@ -157,6 +157,44 @@ class UpgradeFlowIT {
     }
 
     @Test
+    void cooldownEndsExactlyThirtyDaysAfterTheLastRequest() throws Exception {
+        ExistingClient client = fixtures.existingClient(CardVariant.CREDIT_BASE, "2000.00", 12, "1000.00",
+                700, 12, 0, "1700.00");
+        UUID accountId = client.account().getId();
+        upgrade(accountId, key(), null).andExpect(jsonPath("$.status").value("KEPT"));
+
+        clock.advance(Duration.ofDays(30).minusMillis(1));
+        upgrade(accountId, key(), null)
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.retryAt").value(IntegrationTestConfig.START.plus(Duration.ofDays(30)).toString()));
+
+        clock.advance(Duration.ofMillis(1));
+        upgrade(accountId, key(), null)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("KEPT"));
+    }
+
+    @Test
+    void sameKeyWithOtherBodyOrOtherAccountIsRefused() throws Exception {
+        ExistingClient client = healthyBaseClient("5000.00");
+        ExistingClient other = healthyBaseClient("5000.00");
+        String key = key();
+        upgrade(client.account().getId(), key, null).andExpect(status().isCreated());
+
+        upgrade(client.account().getId(), key, "{\"declaredMonthlyIncome\": 7000.00}")
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.type").value("urn:card-engine:problem:idempotency-key-reused"));
+        upgrade(other.account().getId(), key, null)
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.type").value("urn:card-engine:problem:idempotency-key-reused"));
+
+        assertThat(customers.findById(client.account().getCustomerId()).orElseThrow().getDeclaredMonthlyIncome())
+                .as("a refused request changes nothing").isEqualByComparingTo("5000.00");
+        assertThat(accounts.findById(other.account().getId()).orElseThrow().getVariant())
+                .isEqualTo(CardVariant.CREDIT_BASE);
+    }
+
+    @Test
     void replayReturnsTheSameRequest() throws Exception {
         ExistingClient client = healthyBaseClient("5000.00");
         String key = key();

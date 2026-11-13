@@ -12,12 +12,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.IllegalTransactionStateException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @IntegrationTest
 class OutboxPublisherIT {
@@ -34,6 +37,8 @@ class OutboxPublisherIT {
     MutableClock clock;
     @Autowired
     JdbcTemplate jdbc;
+    @Autowired
+    Outbox outbox;
 
     @BeforeEach
     void setUp() {
@@ -86,6 +91,13 @@ class OutboxPublisherIT {
 
         broker.failing(false);
         assertThat(publisher.publishPending()).isEqualTo(3);
+        assertThat(events.countByPublishedAtIsNull()).isZero();
+    }
+
+    @Test
+    void anEventCannotBeWrittenOutsideTheTransactionOfItsChange() {
+        assertThatThrownBy(() -> outbox.append("card", UUID.randomUUID(), "CardIssued", Map.of()))
+                .isInstanceOf(IllegalTransactionStateException.class);
         assertThat(events.countByPublishedAtIsNull()).isZero();
     }
 
