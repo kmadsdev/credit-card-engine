@@ -2,6 +2,10 @@
 
 [Leia em português](README.pt-br.md)
 
+![Terminal recording: curl sends new-client applications and the credit policy returns the card variant, the credit limit and the reasons, with the CPF masked](docs/media/credit-card-engine-acquisition.gif)
+
+*Local run of the README walkthrough.*
+
 A study and showcase project: a backend that runs the acquisition flow (new clients) and
 the upgrade flow (existing clients) for four card variants. All data is simulated: the
 credit bureau, the card vault and the event broker are local stand-ins, and every CPF

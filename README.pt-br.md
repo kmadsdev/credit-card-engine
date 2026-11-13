@@ -2,6 +2,10 @@
 
 [Read in English](README.md)
 
+![Gravação de terminal: curl envia pedidos de clientes novos e a política de crédito devolve a variante do cartão, o limite e os motivos, com o CPF mascarado](docs/media/credit-card-engine-acquisition.gif)
+
+*Execução local do passo a passo do README.*
+
 Projeto de estudo e portfólio: um backend que roda o fluxo de aquisição (cliente novo)
 e o fluxo de upgrade (cliente existente) para quatro variantes de cartão. Todos os
 dados são simulados: o bureau de crédito, o vault de cartões e o broker de eventos são
