@@ -1,0 +1,28 @@
+# Local run: PostgreSQL + the app with the demo profile (one existing client for the upgrade flow).
+# The password below is for this throwaway local database only. Override it with DB_PASSWORD.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cardengine
+      POSTGRES_USER: cardengine
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-local-only}
+    # No host port: only the app talks to the database. Use `docker compose exec postgres psql -U cardengine`.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cardengine -d cardengine"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/cardengine
+      DB_USERNAME: cardengine
+      DB_PASSWORD: ${DB_PASSWORD:-local-only}
+      SPRING_PROFILES_ACTIVE: demo
+    ports:
+      - "8080:8080"
