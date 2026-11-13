@@ -48,6 +48,9 @@ public class CardAccount {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "last_upgrade_request_at")
+    private Instant lastUpgradeRequestAt;
+
     @Version
     private Long version;
 
@@ -78,6 +81,15 @@ public class CardAccount {
         this.variant = target;
         this.creditLimit = newLimit;
         this.updatedAt = now;
+    }
+
+    /**
+     * Stores the time of an upgrade request, for the cooldown. Every request calls it,
+     * also one that changes nothing else, so every request writes this row and goes
+     * through the {@link #version} check.
+     */
+    public void recordUpgradeRequest(Instant now) {
+        this.lastUpgradeRequestAt = now;
     }
 
     private static void requireLimitMatchesVariant(CardVariant variant, BigDecimal limit) {
@@ -113,6 +125,10 @@ public class CardAccount {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public Instant getLastUpgradeRequestAt() {
+        return lastUpgradeRequestAt;
     }
 
     public Long getVersion() {

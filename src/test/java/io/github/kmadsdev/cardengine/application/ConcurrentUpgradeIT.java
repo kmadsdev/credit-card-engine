@@ -72,11 +72,46 @@ class ConcurrentUpgradeIT {
     }
 
     private Object call(UUID accountId) {
+        return call(accountId, "race-" + UUID.randomUUID());
+    }
+
+    private Object call(UUID accountId, String idempotencyKey) {
         try {
-            return upgrades.request(accountId, new UpgradeService.RequestUpgrade(null), "race-" + UUID.randomUUID());
+            return upgrades.request(accountId, new UpgradeService.RequestUpgrade(null), idempotencyKey);
         } catch (RuntimeException e) {
             return e;
         }
+    }
+
+    /** Runs two calls at the bureau barrier and returns both results. */
+    private List<Object> raceTwo(UUID accountId, String keyA, String keyB) throws Exception {
+        bureau.holdCallersAt(new CyclicBarrier(2));
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<Object> a = pool.submit(() -> call(accountId, keyA));
+            Future<Object> b = pool.submit(() -> call(accountId, keyB));
+            return List.of(a.get(30, TimeUnit.SECONDS), b.get(30, TimeUnit.SECONDS));
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    /**
+     * The cooldown must hold under a race too. Low utilization makes the policy keep the
+     * account, so the variant does not change. Two such requests at once must still not
+     * both be stored inside the 30-day cooldown.
+     */
+    @Test
+    void twoConcurrentRequestsThatChangeNoVariantCannotBothPassTheCooldown() throws Exception {
+        CardAccount account = fixtures.existingClient(CardVariant.CREDIT_BASE, "2000.00", 12, "5000.00", 700, 12, 0,
+                "200.00").account();
+
+        List<Object> results = raceTwo(account.getId(), "race-" + UUID.randomUUID(), "race-" + UUID.randomUUID());
+
+        assertThat(results).filteredOn(r -> r instanceof Views.Created<?>).hasSize(1);
+        assertThat(results).filteredOn(r -> r instanceof ConcurrentUpdateException).hasSize(1);
+        assertThat(requests.findByAccountId(account.getId(), org.springframework.data.domain.Pageable.unpaged()))
+                .singleElement().satisfies(r -> assertThat(r.getStatus()).isEqualTo(UpgradeStatus.KEPT));
     }
 
     /**

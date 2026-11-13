@@ -122,8 +122,8 @@ public class UpgradeService {
         Instant now = clock.instant();
         CardAccount account = accounts.findById(accountId).orElseThrow(() -> new NotFoundException("Account", accountId));
 
-        requests.findFirstByAccountIdOrderByCreatedAtDesc(accountId)
-                .map(last -> CreditPolicy.cooldownEndsAt(last.getCreatedAt()))
+        Optional.ofNullable(account.getLastUpgradeRequestAt())
+                .map(CreditPolicy::cooldownEndsAt)
                 .filter(now::isBefore)
                 .ifPresent(retryAt -> {
                     throw new CooldownActiveException(retryAt);
@@ -145,23 +145,29 @@ public class UpgradeService {
         UpgradeRequest request = new UpgradeRequest(requestId, idempotencyKey, hash, account,
                 facts.declaredMonthlyIncome(), score, decision.getId(), now);
 
+        account.recordUpgradeRequest(now);
         switch (result.outcome()) {
             case REJECTED -> request.reject(now);
             case KEPT -> request.keep(now);
             case APPROVED -> {
                 request.approve(result.targetVariant(), result.newLimit(), now);
                 account.upgradeTo(result.targetVariant(), result.newLimit(), now);
-                // Write the version check now, inside this method, so a lost race fails here.
-                accounts.saveAndFlush(account);
-                cardIssuer.issueFor(account);
-                request.markApplied(now);
-                outbox.append("card_account", account.getId(), "AccountUpgraded", Map.of(
-                        "accountId", account.getId().toString(),
-                        "upgradeRequestId", requestId.toString(),
-                        "fromVariant", request.getFromVariant().name(),
-                        "toVariant", account.getVariant().name(),
-                        "creditLimit", account.getCreditLimit().toPlainString()));
             }
+        }
+        // Every request writes the account row (cooldown time, plus the new variant when
+        // approved). Flush now so the version check runs here: of two concurrent requests
+        // for one account, whatever their outcome, only one commits, and a lost race fails
+        // before a card is issued.
+        accounts.saveAndFlush(account);
+        if (result.outcome() == UpgradeDecision.Outcome.APPROVED) {
+            cardIssuer.issueFor(account);
+            request.markApplied(now);
+            outbox.append("card_account", account.getId(), "AccountUpgraded", Map.of(
+                    "accountId", account.getId().toString(),
+                    "upgradeRequestId", requestId.toString(),
+                    "fromVariant", request.getFromVariant().name(),
+                    "toVariant", account.getVariant().name(),
+                    "creditLimit", account.getCreditLimit().toPlainString()));
         }
         requests.save(request);
 

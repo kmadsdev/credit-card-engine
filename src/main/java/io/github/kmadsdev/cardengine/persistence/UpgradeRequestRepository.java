@@ -11,7 +11,5 @@ public interface UpgradeRequestRepository extends JpaRepository<UpgradeRequest, 
 
     Optional<UpgradeRequest> findByIdempotencyKey(String idempotencyKey);
 
-    Optional<UpgradeRequest> findFirstByAccountIdOrderByCreatedAtDesc(UUID accountId);
-
     Page<UpgradeRequest> findByAccountId(UUID accountId, Pageable pageable);
 }
